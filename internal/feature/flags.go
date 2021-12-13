@@ -89,6 +89,18 @@ func OptimizeUnionTransformation() BoolFlag {
 	return optimizeUnionTransformation
 }
 
+var vectorizedMap = feature.MakeBoolFlag(
+	"Vectorized Map",
+	"vectorizedMap",
+	"Jonathan Sternberg",
+	false,
+)
+
+// VectorizedMap - Enables the version of map that supports vectorized functions
+func VectorizedMap() BoolFlag {
+	return vectorizedMap
+}
+
 // Inject will inject the Flagger into the context.
 func Inject(ctx context.Context, flagger Flagger) context.Context {
 	return feature.Inject(ctx, flagger)
@@ -101,6 +113,7 @@ var all = []Flag{
 	queryConcurrencyLimit,
 	optimizeShiftTransformation,
 	optimizeUnionTransformation,
+	vectorizedMap,
 }
 
 var byKey = map[string]Flag{
@@ -110,6 +123,7 @@ var byKey = map[string]Flag{
 	"queryConcurrencyLimit":            queryConcurrencyLimit,
 	"optimizeShiftTransformation":      optimizeShiftTransformation,
 	"optimizeUnionTransformation":      optimizeUnionTransformation,
+	"vectorizedMap":                    vectorizedMap,
 }
 
 // Flags returns all feature flags.
