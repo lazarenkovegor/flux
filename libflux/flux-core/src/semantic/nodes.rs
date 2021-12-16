@@ -1488,7 +1488,7 @@ impl ConditionalExpr {
                 (&unary.operator, &mut unary.argument)
             {
                 if let Expression::Identifier(record_ident) = &mut member.object {
-                    let tcons = record_ident.infer(infer)?;
+                    record_ident.infer(infer)?;
 
                     infer.env.enter_scope();
 
@@ -1500,30 +1500,24 @@ impl ConditionalExpr {
                         record_ident.name.clone(),
                         MonoType::from(types::Record::new(
                             [types::Property {
-                                k: member.property.clone(),
-                                v: MonoType::Var(infer.sub.fresh()),
+                                k: Label::from(member.property.clone()),
+                                v: MonoType::optional(MonoType::Var(infer.sub.fresh())),
                             }],
                             Some(record_rest.clone()),
                         ))
                         .into(),
                     );
 
-                    let ccons = self.consequent.infer(infer)?;
+                    self.consequent.infer(infer)?;
 
                     infer.env.exit_scope();
 
-                    let acons = self.alternate.infer(infer)?;
+                    self.alternate.infer(infer)?;
 
-                    return Ok(tcons
-                        + ccons
-                        + acons
-                        // Any additional fields inferred in `consequent` also needs to exist in
-                        // the full record
-                        + Constraints::from(vec![Constraint::Equal {
-                            exp: record_rest,
-                            act: record_ident.typ.clone(),
-                            loc: record_ident.loc.clone(),
-                        }]));
+                    // Any additional fields inferred in `consequent` also needs to exist in
+                    // the full record
+                    infer.equal(&record_rest, &record_ident.typ, &record_ident.loc);
+                    return Ok(());
                 }
             }
         }
