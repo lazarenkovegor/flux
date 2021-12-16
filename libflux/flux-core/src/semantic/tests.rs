@@ -3784,7 +3784,7 @@ fn symbol_resolution() {
 }
 
 #[test]
-fn exists_operator() {
+fn exists_operator_does_not_bleed_to_other_branches() {
     // Usage of `r.a` inside the exists operator or the true branch should not bleed into the
     // surrounding code
     test_infer! {
@@ -3795,6 +3795,10 @@ fn exists_operator() {
             "f" => "(r: { A with a: int?, b: int }) => int",
         ],
     }
+}
+
+#[test]
+fn exists_operator_does_not_forget_other_fields() {
     // r.b is a required field so that should be reflected in the type signature
     test_infer! {
         src: r#"
@@ -3804,6 +3808,27 @@ fn exists_operator() {
             "f" => "(r: { A with a: int?, b: int }) => int",
         ],
     }
+}
+
+#[test]
+fn optional_fields_allow_passing_records_with_and_without_the_field() {
+    // Should be able to records with and without `a`
+    test_infer! {
+        src: r#"
+            f = (r) => if exists r.a then r.a else r.b + 0
+            x = f(r: { a: 1, b: 2 })
+            y = f(r: { b: 2 })
+        "#,
+        exp: map![
+            "f" => "(r: { A with a: int?, b: int }) => int",
+            "x" => "int",
+            "y" => "int",
+        ],
+    }
+}
+
+#[test]
+fn exists_operator_errors() {
     // `r.a` should only exist in the first branch
     test_error_msg! {
         src: r#"
