@@ -1502,7 +1502,6 @@ impl ConditionalExpr {
 
                     member.typ = MonoType::Var(infer.sub.fresh());
                     infer.equal(
-                        &record_ident.typ,
                         &MonoType::from(types::Record::new(
                             [types::Property {
                                 k: Label::from(member.property.clone()),
@@ -1510,6 +1509,7 @@ impl ConditionalExpr {
                             }],
                             Some(MonoType::Var(infer.sub.fresh())),
                         )),
+                        &record_ident.typ,
                         &unary.loc,
                     );
 

@@ -3812,7 +3812,7 @@ fn exists_operator_does_not_forget_other_fields() {
 
 #[test]
 fn optional_fields_allow_passing_records_with_and_without_the_field() {
-    // Should be able to records with and without `a`
+    // Should be able to pass records with and without `a`
     test_infer! {
         src: r#"
             f = (r) => if exists r.a then r.a else r.b + 0
@@ -3836,8 +3836,6 @@ fn exists_operator_errors() {
             x = if exists r.a then r.a else r.a
         "#,
         expect: expect![[r#"
-            error @3:20-3:30: found unexpected label a
-
             error @3:45-3:46: record is missing label a"#]],
     }
 
