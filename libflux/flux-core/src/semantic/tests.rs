@@ -25,6 +25,7 @@ use std::{collections::HashMap, convert::TryFrom};
 
 use colored::*;
 use derive_more::Display;
+use expect_test::expect;
 
 use crate::{
     ast,
@@ -3791,7 +3792,7 @@ fn exists_operator() {
             f = (r) => if exists r.a then r.a else r.b + 0
         "#,
         exp: map![
-            "f" => "(r: { A with b: int }) => int",
+            "f" => "(r: { A with a: int?, b: int }) => int",
         ],
     }
     // r.b is a required field so that should be reflected in the type signature
@@ -3800,7 +3801,7 @@ fn exists_operator() {
             f = (r) => if exists r.a then r.a + r.b + 0 else 0
         "#,
         exp: map![
-            "f" => "(r: { A with b: int }) => int",
+            "f" => "(r: { A with a: int?, b: int }) => int",
         ],
     }
     // `r.a` should only exist in the first branch
@@ -3809,7 +3810,10 @@ fn exists_operator() {
             r = {}
             x = if exists r.a then r.a else r.a
         "#,
-        err: "error @3:45-3:46: record is missing label a",
+        expect: expect![[r#"
+            error @3:20-3:30: found unexpected label a
+
+            error @3:45-3:46: record is missing label a"#]],
     }
 
     // Should be an error as `a` exists, but has the wrong type (or it should fail the exists check
@@ -3819,6 +3823,6 @@ fn exists_operator() {
             f = (r) => if exists r.a then r.a else 0
             x = f(r: { a: "" })
         "#,
-        err: "error @3:45-3:46: TODO",
+        expect: expect![[r#"error @3:17-3:32: expected int? but found string (argument r)"#]]
     }
 }

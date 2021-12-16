@@ -123,36 +123,46 @@ struct InferState<'a, 'env> {
 }
 
 impl InferState<'_, '_> {
-    fn lookup(&mut self, loc: &ast::SourceLocation, name: &Symbol) -> PolyType {
-        self.env.lookup(name).cloned().unwrap_or_else(|| {
+    fn lookup(&mut self, loc: &ast::SourceLocation, name: &Symbol) -> MonoType {
+        let poly = self.env.lookup(name).cloned().unwrap_or_else(|| {
             self.error(
                 loc.clone(),
                 ErrorKind::UndefinedIdentifier(name.to_string()),
             );
             PolyType::error()
-        })
+        });
+
+        let (t, cons) = infer::instantiate(poly, self.sub, loc.clone());
+        self.solve(&cons);
+
+        t
     }
 
     fn constrain(&mut self, exp: Kind, act: &MonoType, loc: &ast::SourceLocation) {
         if let Err(err) = infer::constrain(exp, act, loc, self.sub) {
+            log::debug!("Error: {}", err);
             self.errors.push(err.into());
         }
     }
 
     fn equal(&mut self, exp: &MonoType, act: &MonoType, loc: &ast::SourceLocation) {
         if let Err(err) = infer::equal(exp, act, loc, self.sub) {
+            log::debug!("Error: {}", err);
             self.errors.push(err.into());
         }
     }
 
     fn solve(&mut self, cons: &impl AsRef<[Constraint]>) {
         if let Err(err) = infer::solve(cons.as_ref(), self.sub) {
+            log::debug!("Error: {}", err);
             self.errors.push(err.into());
         }
     }
 
     fn error(&mut self, loc: ast::SourceLocation, error: ErrorKind) {
-        self.errors.push(located(loc, error));
+        let err = located(loc, error);
+        log::debug!("Error: {}", err);
+        self.errors.push(err);
     }
 }
 
@@ -1490,6 +1500,19 @@ impl ConditionalExpr {
                 if let Expression::Identifier(record_ident) = &mut member.object {
                     record_ident.infer(infer)?;
 
+                    member.typ = MonoType::Var(infer.sub.fresh());
+                    infer.equal(
+                        &record_ident.typ,
+                        &MonoType::from(types::Record::new(
+                            [types::Property {
+                                k: Label::from(member.property.clone()),
+                                v: MonoType::from(types::Optional(member.typ.clone())),
+                            }],
+                            Some(MonoType::Var(infer.sub.fresh())),
+                        )),
+                        &unary.loc,
+                    );
+
                     infer.env.enter_scope();
 
                     // In `consequent` we know that the field must exist so we shadow the record
@@ -1501,9 +1524,7 @@ impl ConditionalExpr {
                         MonoType::from(types::Record::new(
                             [types::Property {
                                 k: Label::from(member.property.clone()),
-                                v: MonoType::from(types::Optional(MonoType::Var(
-                                    infer.sub.fresh(),
-                                ))),
+                                v: member.typ.clone(),
                             }],
                             Some(record_rest.clone()),
                         ))
@@ -1519,6 +1540,12 @@ impl ConditionalExpr {
                     // Any additional fields inferred in `consequent` also needs to exist in
                     // the full record
                     infer.equal(&record_rest, &record_ident.typ, &record_ident.loc);
+
+                    infer.equal(
+                        &self.consequent.type_of(),
+                        &self.alternate.type_of(),
+                        &self.alternate.loc(),
+                    );
                     return Ok(());
                 }
             }
@@ -1807,11 +1834,8 @@ pub struct IdentifierExpr {
 
 impl IdentifierExpr {
     fn infer(&mut self, infer: &mut InferState<'_, '_>) -> Result {
-        let poly = infer.lookup(&self.loc, &self.name);
+        self.typ = infer.lookup(&self.loc, &self.name);
 
-        let (t, cons) = infer::instantiate(poly, infer.sub, self.loc.clone());
-        infer.solve(&cons);
-        self.typ = t;
         Ok(())
     }
     fn apply(mut self, sub: &Substitution) -> Self {
