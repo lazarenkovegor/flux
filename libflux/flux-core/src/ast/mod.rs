@@ -587,6 +587,8 @@ pub enum MonoType {
     Record(RecordType),
     #[serde(rename = "FunctionType")]
     Function(Box<FunctionType>),
+    #[serde(rename = "OptionalType")]
+    Optional(Box<OptionalType>),
 }
 
 impl MonoType {
@@ -599,6 +601,7 @@ impl MonoType {
             MonoType::Dict(t) => &t.base,
             MonoType::Record(t) => &t.base,
             MonoType::Function(t) => &t.base,
+            MonoType::Optional(t) => &t.base,
         }
     }
 }
@@ -652,6 +655,16 @@ pub struct FunctionType {
     #[serde(flatten)]
     pub base: BaseNode,
     pub parameters: Vec<ParameterType>,
+    pub monotype: MonoType,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[allow(missing_docs)]
+pub struct OptionalType {
+    #[serde(skip_serializing_if = "BaseNode::is_empty")]
+    #[serde(default)]
+    #[serde(flatten)]
+    pub base: BaseNode,
     pub monotype: MonoType,
 }
 

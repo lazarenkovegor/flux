@@ -385,6 +385,8 @@ pub enum MonoType {
     Fun(Ptr<Function>),
     #[display(fmt = "{}", _0)]
     Vector(Ptr<Vector>),
+    #[display(fmt = "{}", _0)]
+    Optional(Ptr<Optional>),
 }
 
 impl Serialize for MonoType {
@@ -411,6 +413,7 @@ impl Serialize for MonoType {
             Record(&'a Ptr<Record>),
             Fun(&'a Ptr<Function>),
             Vector(&'a Ptr<Vector>),
+            Optional(&'a Ptr<Optional>),
         }
 
         match self {
@@ -432,6 +435,7 @@ impl Serialize for MonoType {
             Self::Record(p) => MonoTypeSer::Record(p),
             Self::Fun(p) => MonoTypeSer::Fun(p),
             Self::Vector(p) => MonoTypeSer::Vector(p),
+            Self::Optional(p) => MonoTypeSer::Optional(p),
         }
         .serialize(serializer)
     }
@@ -592,6 +596,7 @@ impl Substitutable for MonoType {
             MonoType::Dict(dict) => dict.apply_ref(sub).map(MonoType::dict),
             MonoType::Record(obj) => obj.apply_ref(sub).map(MonoType::record),
             MonoType::Fun(fun) => fun.apply_ref(sub).map(MonoType::fun),
+            MonoType::Optional(opt) => opt.apply_ref(sub).map(MonoType::optional),
         }
     }
     fn free_vars(&self) -> Vec<Tvar> {
@@ -603,6 +608,7 @@ impl Substitutable for MonoType {
             MonoType::Dict(dict) => dict.free_vars(),
             MonoType::Record(obj) => obj.free_vars(),
             MonoType::Fun(fun) => fun.free_vars(),
+            MonoType::Optional(opt) => opt.free_vars(),
         }
     }
 }
@@ -617,6 +623,7 @@ impl MaxTvar for MonoType {
             MonoType::Dict(dict) => dict.max_tvar(),
             MonoType::Record(obj) => obj.max_tvar(),
             MonoType::Fun(fun) => fun.max_tvar(),
+            MonoType::Optional(opt) => opt.max_tvar(),
         }
     }
 }
@@ -662,6 +669,12 @@ impl From<Function> for MonoType {
     }
 }
 
+impl From<Optional> for MonoType {
+    fn from(o: Optional) -> MonoType {
+        MonoType::Optional(Ptr::new(o))
+    }
+}
+
 #[allow(missing_docs)]
 impl MonoType {
     pub const INT: MonoType = MonoType::Builtin(BuiltinType::Int);
@@ -701,6 +714,11 @@ impl MonoType {
         Self::Record(r.into())
     }
 
+    /// Creates a function type
+    pub fn optional(o: impl Into<Ptr<Optional>>) -> Self {
+        Self::Optional(o.into())
+    }
+
     /// Performs unification on the type with another type.
     /// If successful, results in a solution to the unification problem,
     /// in the form of a substitution. If there is no solution to the
@@ -737,6 +755,7 @@ impl MonoType {
             (MonoType::Dict(t), MonoType::Dict(s)) => t.unify(s, sub),
             (MonoType::Record(t), MonoType::Record(s)) => t.unify(s, sub),
             (MonoType::Fun(t), MonoType::Fun(s)) => t.unify(s, sub),
+            (MonoType::Optional(t), MonoType::Optional(s)) => t.unify(s, sub),
             (exp, act) => Err(Error::CannotUnify {
                 exp: exp.clone(),
                 act: act.clone(),
@@ -758,6 +777,7 @@ impl MonoType {
             MonoType::Dict(dict) => dict.constrain(with, cons),
             MonoType::Record(obj) => obj.constrain(with, cons),
             MonoType::Fun(fun) => fun.constrain(with, cons),
+            MonoType::Optional(opt) => opt.constrain(with, cons),
         }
     }
 
@@ -770,6 +790,7 @@ impl MonoType {
             MonoType::Dict(dict) => dict.contains(tv),
             MonoType::Record(row) => row.contains(tv),
             MonoType::Fun(fun) => fun.contains(tv),
+            MonoType::Optional(opt) => opt.contains(tv),
         }
     }
 
@@ -961,6 +982,41 @@ impl MaxTvar for Vector {
 }
 
 impl Vector {
+    // self represents the expected type.
+    fn unify(&self, with: &Self, f: &mut Substitution) -> Result<(), Error> {
+        self.0.unify(&with.0, f)
+    }
+
+    fn constrain(&self, with: Kind, cons: &mut TvarKinds) -> Result<(), Error> {
+        self.0.constrain(with, cons)
+    }
+
+    fn contains(&self, tv: Tvar) -> bool {
+        self.0.contains(tv)
+    }
+}
+
+/// monotype vector used by vectorization transformation
+#[derive(Debug, Display, Clone, PartialEq, Serialize)]
+#[display(fmt = "{}?", _0)]
+pub struct Optional(pub MonoType);
+
+impl Substitutable for Optional {
+    fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
+        self.0.apply_ref(sub).map(Self)
+    }
+    fn free_vars(&self) -> Vec<Tvar> {
+        self.0.free_vars()
+    }
+}
+
+impl MaxTvar for Optional {
+    fn max_tvar(&self) -> Option<Tvar> {
+        self.0.max_tvar()
+    }
+}
+
+impl Optional {
     // self represents the expected type.
     fn unify(&self, with: &Self, f: &mut Substitution) -> Result<(), Error> {
         self.0.unify(&with.0, f)
