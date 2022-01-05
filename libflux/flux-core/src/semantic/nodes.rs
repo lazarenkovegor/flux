@@ -27,8 +27,8 @@ use crate::{
         infer::{self, Constraint},
         sub::{Substitutable, Substituter, Substitution},
         types::{
-            self, Array, Dictionary, Function, Kind, MonoType, MonoTypeMap, PolyType, PolyTypeMap,
-            RecordLabel, SemanticMap, Tvar, TvarKinds,
+            self, Array, Dictionary, Function, Kind, Label, MonoType, MonoTypeMap, PolyType,
+            PolyTypeMap, RecordLabel, SemanticMap, Tvar, TvarKinds,
         },
     },
 };
@@ -275,7 +275,7 @@ impl Expression {
             Expression::StringExpr(_) => MonoType::STRING,
             Expression::Integer(_) => MonoType::INT,
             Expression::Float(_) => MonoType::FLOAT,
-            Expression::StringLit(_) => MonoType::STRING,
+            Expression::StringLit(lit) => MonoType::Label(Label::from(lit.value.as_str())),
             Expression::Duration(_) => MonoType::DURATION,
             Expression::Uint(_) => MonoType::UINT,
             Expression::Boolean(_) => MonoType::BOOL,

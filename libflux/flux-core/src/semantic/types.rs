@@ -437,7 +437,7 @@ pub enum MonoType {
     Error,
     #[display(fmt = "{}", _0)]
     Builtin(BuiltinType),
-    #[display(fmt = "'{}", _0)]
+    #[display(fmt = "\"{}\"", _0)]
     Label(Label),
     #[display(fmt = "{}", _0)]
     Var(Tvar),
@@ -805,8 +805,13 @@ impl MonoType {
             // An error has already occurred so assume everything is ok here so that we do not
             // create additional, spurious errors
             (MonoType::Error, _) | (_, MonoType::Error) => (),
+
             (MonoType::Builtin(exp), MonoType::Builtin(act)) => exp.unify(*act, unifier),
+
             (MonoType::Label(l), MonoType::Label(r)) if l == r => (),
+            (MonoType::Builtin(BuiltinType::String), MonoType::Label(_))
+            | (MonoType::Label(_), MonoType::Builtin(BuiltinType::String)) => (),
+
             (MonoType::Var(tv), MonoType::Var(tv2)) => {
                 match (unifier.sub.try_apply(*tv), unifier.sub.try_apply(*tv2)) {
                     (Some(self_), Some(actual)) => self_.unify(&actual, unifier),
@@ -823,11 +828,17 @@ impl MonoType {
                 Some(typ) => t.unify(&typ, unifier),
                 None => tv.unify(t, unifier),
             },
+
             (MonoType::Arr(t), MonoType::Arr(s)) => t.unify(s, unifier),
+
             (MonoType::Vector(t), MonoType::Vector(s)) => t.unify(s, unifier),
+
             (MonoType::Dict(t), MonoType::Dict(s)) => t.unify(s, unifier),
+
             (MonoType::Record(t), MonoType::Record(s)) => t.unify(s, unifier),
+
             (MonoType::Fun(t), MonoType::Fun(s)) => t.unify(s, unifier),
+
             (exp, act) => {
                 unifier.errors.push(Error::CannotUnify {
                     exp: exp.clone(),
