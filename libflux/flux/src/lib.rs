@@ -704,23 +704,23 @@ mod tests {
         let mut ty = MonoType::from(Record::new(
             [
                 Property {
-                    k: Label::from("a"),
+                    k: Label::from("a").into(),
                     v: MonoType::Var(Tvar(4949)),
                 },
                 Property {
-                    k: Label::from("b"),
+                    k: Label::from("b").into(),
                     v: MonoType::Var(Tvar(4949)),
                 },
                 Property {
-                    k: Label::from("e"),
+                    k: Label::from("e").into(),
                     v: MonoType::Var(Tvar(4957)),
                 },
                 Property {
-                    k: Label::from("f"),
+                    k: Label::from("f").into(),
                     v: MonoType::Var(Tvar(4957)),
                 },
                 Property {
-                    k: Label::from("g"),
+                    k: Label::from("g").into(),
                     v: MonoType::Var(Tvar(4957)),
                 },
             ],

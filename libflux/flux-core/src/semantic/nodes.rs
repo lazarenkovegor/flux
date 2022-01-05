@@ -27,8 +27,8 @@ use crate::{
         infer::{self, Constraint},
         sub::{Substitutable, Substituter, Substitution},
         types::{
-            self, Array, Dictionary, Function, Kind, Label, MonoType, MonoTypeMap, PolyType,
-            PolyTypeMap, SemanticMap, Tvar, TvarKinds,
+            self, Array, Dictionary, Function, Kind, MonoType, MonoTypeMap, PolyType, PolyTypeMap,
+            RecordLabel, SemanticMap, Tvar, TvarKinds,
         },
     },
 };
@@ -1153,7 +1153,7 @@ impl FunctionExpr {
                                 loc: e.loc.clone(),
                                 typ: MonoType::from(types::Record::new(
                                     properties.iter().map(|p| types::Property {
-                                        k: Label::from(p.key.name.clone()),
+                                        k: RecordLabel::from(p.key.name.clone()),
                                         v: p.value.type_of(),
                                     }),
                                     with.as_ref().map(|with| with.typ.clone()),
@@ -1623,7 +1623,7 @@ impl MemberExpr {
 
         let r = {
             let head = types::Property {
-                k: Label::from(self.property.to_owned()),
+                k: RecordLabel::from(self.property.to_owned()),
                 v: self.typ.to_owned(),
             };
             let tail = MonoType::Var(infer.sub.fresh());
@@ -1710,7 +1710,7 @@ impl ObjectExpr {
             prop.value.infer(infer)?;
             r = MonoType::from(types::Record::Extension {
                 head: types::Property {
-                    k: Label::from(prop.key.name.clone()),
+                    k: RecordLabel::from(prop.key.name.clone()),
                     v: prop.value.type_of(),
                 },
                 tail: r,

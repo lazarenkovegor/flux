@@ -11,7 +11,7 @@ use crate::semantic::{
     nodes::Symbol,
     import::Packages,
     types::{
-        Label,
+        RecordLabel,
         Array,
         Dictionary,
         Function,
@@ -242,7 +242,7 @@ impl From<fb::Record<'_>> for Option<MonoType> {
 impl From<fb::Prop<'_>> for Option<Property> {
     fn from(t: fb::Prop) -> Option<Property> {
         Some(Property {
-            k: Label::from(t.k()?),
+            k: RecordLabel::from(t.k()?),
             v: from_table(t.v()?, t.v_type())?,
         })
     }
@@ -605,7 +605,7 @@ fn build_prop<'a>(
     prop: &Property,
 ) -> flatbuffers::WIPOffset<fb::Prop<'a>> {
     let (off, typ) = build_type(builder, &prop.v);
-    let k = builder.create_string(prop.k.as_symbol().full_name());
+    let k = builder.create_string(&prop.k.to_string());
     fb::Prop::create(
         builder,
         &fb::PropArgs {
