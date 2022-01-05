@@ -437,6 +437,8 @@ pub enum MonoType {
     Error,
     #[display(fmt = "{}", _0)]
     Builtin(BuiltinType),
+    #[display(fmt = "'{}", _0)]
+    Label(Label),
     #[display(fmt = "{}", _0)]
     Var(Tvar),
     #[display(fmt = "{}", _0)]
@@ -470,6 +472,7 @@ impl Serialize for MonoType {
             Regexp,
             Bytes,
             Var(Tvar),
+            Label(&'a Label),
             Arr(&'a Ptr<Array>),
             Dict(&'a Ptr<Dictionary>),
             Record(&'a Ptr<Record>),
@@ -491,6 +494,7 @@ impl Serialize for MonoType {
                 BuiltinType::Bytes => MonoTypeSer::Bytes,
             },
             Self::Var(v) => MonoTypeSer::Var(*v),
+            Self::Label(p) => MonoTypeSer::Label(p),
             Self::Arr(p) => MonoTypeSer::Arr(p),
             Self::Dict(p) => MonoTypeSer::Dict(p),
             Self::Record(p) => MonoTypeSer::Record(p),
@@ -634,7 +638,7 @@ impl BuiltinType {
 impl Substitutable for MonoType {
     fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
         match self {
-            MonoType::Error | MonoType::Builtin(_) => None,
+            MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) => None,
             MonoType::Var(tvr) => sub.try_apply(*tvr).map(|new| {
                 // If a variable is the replacement we do not recurse further
                 // as `instantiate` breaks in cases where it generates a substitution map
@@ -659,7 +663,7 @@ impl Substitutable for MonoType {
     }
     fn free_vars(&self, vars: &mut Vec<Tvar>) {
         match self {
-            MonoType::Error | MonoType::Builtin(_) => (),
+            MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) => (),
             MonoType::Var(tvr) => {
                 if let Err(i) = vars.binary_search(tvr) {
                     vars.insert(i, *tvr);
@@ -677,7 +681,7 @@ impl Substitutable for MonoType {
 impl MaxTvar for MonoType {
     fn max_tvar(&self) -> Option<Tvar> {
         match self {
-            MonoType::Error | MonoType::Builtin(_) => None,
+            MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) => None,
             MonoType::Var(tvr) => tvr.max_tvar(),
             MonoType::Arr(arr) => arr.max_tvar(),
             MonoType::Vector(vector) => vector.max_tvar(),
@@ -802,6 +806,7 @@ impl MonoType {
             // create additional, spurious errors
             (MonoType::Error, _) | (_, MonoType::Error) => (),
             (MonoType::Builtin(exp), MonoType::Builtin(act)) => exp.unify(*act, unifier),
+            (MonoType::Label(l), MonoType::Label(r)) if l == r => (),
             (MonoType::Var(tv), MonoType::Var(tv2)) => {
                 match (unifier.sub.try_apply(*tv), unifier.sub.try_apply(*tv2)) {
                     (Some(self_), Some(actual)) => self_.unify(&actual, unifier),
@@ -837,6 +842,7 @@ impl MonoType {
         match self {
             MonoType::Error => Ok(()),
             MonoType::Builtin(typ) => typ.constrain(with),
+            MonoType::Label(_) => BuiltinType::String.constrain(with),
             MonoType::Var(tvr) => {
                 tvr.constrain(with, cons);
                 Ok(())
@@ -851,7 +857,7 @@ impl MonoType {
 
     fn contains(&self, tv: Tvar) -> bool {
         match self {
-            MonoType::Error | MonoType::Builtin(_) => false,
+            MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) => false,
             MonoType::Var(tvr) => tv == *tvr,
             MonoType::Arr(arr) => arr.contains(tv),
             MonoType::Vector(vector) => vector.contains(tv),
@@ -1329,6 +1335,15 @@ impl Record {
                     tail: r,
                 },
             ) if a != b => {
+                match (a, b) {
+                    (RecordLabel::Variable(a), RecordLabel::Concrete(b)) => {
+                        a.unify(&MonoType::Label(b.clone()), unifier)
+                    }
+                    (RecordLabel::Concrete(a), RecordLabel::Variable(b)) => {
+                        b.unify(&MonoType::Label(a.clone()), unifier)
+                    }
+                    _ => (),
+                }
                 let var = unifier.sub.fresh();
                 let exp = MonoType::from(Record::Extension {
                     head: Property {

@@ -4,7 +4,7 @@ use super::*;
 fn labels() {
     test_infer! {
         env: map![
-            "fill" => "(<-tables: [{ A with COLUMN: B }], ?column: D, ?value: B, ?usePrevious: bool) => [C]
+            "fill" => "(<-tables: [{ A with D: B }], ?column: D, ?value: B, ?usePrevious: bool) => [C]
                 where C: Record,
                       D: Label
                 "
@@ -13,7 +13,7 @@ fn labels() {
             x = [{ a: 1 }] |> fill(column: "a", value: 2)
         "#,
         exp: map![
-            "x" => "{}",
+            "x" => "{ a: int }",
         ],
     }
 }
