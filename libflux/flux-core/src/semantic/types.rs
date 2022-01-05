@@ -45,9 +45,12 @@ impl<'a, E> Unifier<'a, E> {
         E: From<Error>,
     {
         if !self.delayed_records.is_empty() {
+            dbg!(&self.delayed_records, &self.sub);
             let mut sub_unifier = Unifier::new(self.sub);
             while let Some((expected, actual)) = self.delayed_records.pop() {
-                expected.unify(&actual, &mut sub_unifier);
+                let expected = expected.apply(sub_unifier.sub);
+                let actual = actual.apply(sub_unifier.sub);
+                expected.unify_now(&actual, &mut sub_unifier);
             }
 
             self.errors
@@ -1323,8 +1326,13 @@ impl Record {
             })
         };
         if has_variable_label(self) || has_variable_label(actual) {
+            unifier.delayed_records.push((self.clone(), actual.clone()));
             return;
         }
+        self.unify_now(actual, unifier)
+    }
+
+    fn unify_now(&self, actual: &Self, unifier: &mut Unifier<'_>) {
         match (self, actual) {
             (Record::Empty, Record::Empty) => (),
             (
@@ -1523,6 +1531,29 @@ pub enum RecordLabel {
     Concrete(Label),
 }
 
+impl Substitutable for RecordLabel {
+    fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
+        match self {
+            Self::Variable(tvr) => sub.try_apply(*tvr).and_then(|new| match new {
+                MonoType::Label(l) => Some(Self::Concrete(l)),
+                _ => None,
+            }),
+            Self::Concrete(_) => None,
+        }
+    }
+
+    fn free_vars(&self, vars: &mut Vec<Tvar>) {
+        match self {
+            Self::Variable(tv) => {
+                if let Err(i) = vars.binary_search(tv) {
+                    vars.insert(i, *tv);
+                }
+            }
+            Self::Concrete(_) => (),
+        }
+    }
+}
+
 impl fmt::Display for RecordLabel {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -1672,16 +1703,14 @@ pub struct Property<K = RecordLabel, V = MonoType> {
 
 impl<K, V> Substitutable for Property<K, V>
 where
-    K: Clone,
-    V: Substitutable,
+    K: Substitutable + Clone,
+    V: Substitutable + Clone,
 {
     fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
-        self.v.apply_ref(sub).map(|v| Property {
-            k: self.k.clone(),
-            v,
-        })
+        apply2(&self.k, &self.v, sub).map(|(k, v)| Property { k, v })
     }
     fn free_vars(&self, vars: &mut Vec<Tvar>) {
+        self.k.free_vars(vars);
         self.v.free_vars(vars)
     }
 }

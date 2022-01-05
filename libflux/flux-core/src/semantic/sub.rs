@@ -1,7 +1,9 @@
 //! Substitutions during type inference.
-use std::{borrow::Cow, cell::RefCell, iter::FusedIterator};
+use std::{borrow::Cow, cell::RefCell, collections::BTreeMap, fmt, iter::FusedIterator};
 
 use crate::semantic::types::{union, Error, MonoType, SubstitutionMap, Tvar, TvarKinds};
+
+use ena::unify::UnifyKey;
 
 /// A substitution defines a function that takes a monotype as input
 /// and returns a monotype as output. The output type is interpreted
@@ -9,10 +11,40 @@ use crate::semantic::types::{union, Error, MonoType, SubstitutionMap, Tvar, Tvar
 ///
 /// Substitutions are idempotent. Given a substitution *s* and an input
 /// type *x*, we have *s*(*s*(*x*)) = *s*(*x*).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct Substitution {
     table: RefCell<UnificationTable>,
     cons: RefCell<TvarKinds>,
+}
+
+impl fmt::Debug for Substitution {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut roots = BTreeMap::new();
+
+        let mut table = self.table.borrow_mut();
+
+        #[derive(Debug)]
+        struct Root<T> {
+            variables: Vec<Tvar>,
+            value: T,
+        }
+        for i in 0..table.len() as u32 {
+            let i = Tvar::from_index(i);
+            let root = table.find(i);
+            let root_node = roots.entry(root).or_insert_with(|| Root {
+                variables: Vec::new(),
+                value: table.probe_value(root),
+            });
+            if i != root {
+                root_node.variables.push(i);
+            }
+        }
+
+        f.debug_struct("Substitution")
+            .field("table", &roots)
+            .field("cons", &*self.cons.borrow())
+            .finish()
+    }
 }
 
 /// An implementation of a
@@ -178,6 +210,13 @@ pub trait Substitutable {
 
     /// Get all free type variables in a type.
     fn free_vars(&self, vars: &mut Vec<Tvar>);
+}
+
+impl Substitutable for String {
+    fn apply_ref(&self, _sub: &dyn Substituter) -> Option<Self> {
+        None
+    }
+    fn free_vars(&self, _vars: &mut Vec<Tvar>) {}
 }
 
 impl<T> Substitutable for Box<T>
