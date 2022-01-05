@@ -215,6 +215,7 @@ pub fn instantiate(
     sub: &mut Substitution,
     loc: SourceLocation,
 ) -> (MonoType, Constraints) {
+    eprintln!("Instantiate {}", poly);
     // Substitute fresh type variables for all quantified variables
     let sub: SubstitutionMap = poly
         .vars

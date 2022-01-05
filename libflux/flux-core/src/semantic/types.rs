@@ -1536,6 +1536,7 @@ impl Substitutable for RecordLabel {
         match self {
             Self::Variable(tvr) => sub.try_apply(*tvr).and_then(|new| match new {
                 MonoType::Label(l) => Some(Self::Concrete(l)),
+                MonoType::Var(l) => Some(Self::Variable(l)),
                 _ => None,
             }),
             Self::Concrete(_) => None,

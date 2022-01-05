@@ -12,7 +12,7 @@ fn labels() {
             x = [{ a: 1 }] |> fill(column: "a", value: "x")
         "#,
         exp: map![
-            "x" => "{ a: string }",
+            "x" => "[{ a: string }]",
         ],
     }
 }
