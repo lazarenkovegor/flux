@@ -4,16 +4,15 @@ use super::*;
 fn labels() {
     test_infer! {
         env: map![
-            "fill" => "(<-tables: [{ A with D: B }], ?column: D, ?value: B, ?usePrevious: bool) => [C]
-                where C: Record,
-                      D: Label
+            "fill" => "(<-tables: [{ A with B: C }], ?column: B, ?value: D) => [{ A with B: D }]
+                where B: Label
                 "
         ],
         src: r#"
-            x = [{ a: 1 }] |> fill(column: "a", value: 2)
+            x = [{ a: 1 }] |> fill(column: "a", value: "x")
         "#,
         exp: map![
-            "x" => "{ a: int }",
+            "x" => "{ a: string }",
         ],
     }
 }

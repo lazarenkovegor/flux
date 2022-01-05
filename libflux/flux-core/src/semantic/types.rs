@@ -27,7 +27,39 @@ pub type SemanticMapIter<'a, K, V> = std::collections::btree_map::Iter<'a, K, V>
 
 struct Unifier<'a, E = Error> {
     sub: &'a mut Substitution,
+    delayed_records: Vec<(Record, Record)>,
     errors: Errors<E>,
+}
+
+impl<'a, E> Unifier<'a, E> {
+    fn new(sub: &'a mut Substitution) -> Self {
+        Unifier {
+            sub,
+            delayed_records: Vec::new(),
+            errors: Errors::new(),
+        }
+    }
+
+    fn finish(mut self) -> Result<(), Errors<E>>
+    where
+        E: From<Error>,
+    {
+        if !self.delayed_records.is_empty() {
+            let mut sub_unifier = Unifier::new(self.sub);
+            while let Some((expected, actual)) = self.delayed_records.pop() {
+                expected.unify(&actual, &mut sub_unifier);
+            }
+
+            self.errors
+                .extend(sub_unifier.errors.into_iter().map(E::from));
+        }
+
+        if self.errors.has_errors() {
+            Err(self.errors)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// A type scheme that quantifies the free variables of a monotype.
@@ -781,18 +813,11 @@ impl MonoType {
         actual: &Self,
         sub: &mut Substitution,
     ) -> Result<(), Errors<Error>> {
-        let mut unifier = Unifier {
-            sub,
-            errors: Errors::new(),
-        };
+        let mut unifier = Unifier::new(sub);
 
         self.unify(actual, &mut unifier);
 
-        if unifier.errors.has_errors() {
-            Err(unifier.errors)
-        } else {
-            Ok(())
-        }
+        unifier.finish()
     }
 
     fn unify(
@@ -1291,6 +1316,15 @@ impl Record {
     // self represents the expected type.
     //
     fn unify(&self, actual: &Self, unifier: &mut Unifier<'_>) {
+        let has_variable_label = |r: &Record| {
+            r.fields().any(|prop| match prop.k {
+                RecordLabel::Variable(v) => unifier.sub.try_apply(v).is_none(),
+                RecordLabel::Concrete(_) => false,
+            })
+        };
+        if has_variable_label(self) || has_variable_label(actual) {
+            return;
+        }
         match (self, actual) {
             (Record::Empty, Record::Empty) => (),
             (
@@ -1467,10 +1501,7 @@ fn unify_in_context<T>(
 ) where
     T: TypeLike,
 {
-    let mut sub_unifier = Unifier {
-        sub: unifier.sub,
-        errors: Errors::new(),
-    };
+    let mut sub_unifier = Unifier::new(unifier.sub);
     exp.unify(act.typ(), &mut sub_unifier);
 
     unifier.errors.extend(
@@ -1479,6 +1510,8 @@ fn unify_in_context<T>(
             .into_iter()
             .map(|e| act.error(context(e))),
     );
+
+    unifier.delayed_records.extend(sub_unifier.delayed_records);
 }
 
 /// Labels in records that are allowed be variables
@@ -1821,19 +1854,13 @@ impl Function {
     ) -> Result<(), Errors<T::Error>>
     where
         T: TypeLike + Clone,
+        T::Error: From<Error>,
     {
-        let mut unifier = Unifier {
-            sub,
-            errors: Errors::new(),
-        };
+        let mut unifier = Unifier::new(sub);
 
         self.unify(actual, &mut unifier);
 
-        if unifier.errors.has_errors() {
-            Err(unifier.errors)
-        } else {
-            Ok(())
-        }
+        unifier.finish()
     }
 
     /// Given two function types f and g, the process for unifying their arguments is as follows:
