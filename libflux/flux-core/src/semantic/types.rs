@@ -49,7 +49,6 @@ impl<'a, E> Unifier<'a, E> {
         E: From<Error>,
     {
         if !self.delayed_records.is_empty() {
-            dbg!(&self.delayed_records, &self.sub);
             let mut sub_unifier = Unifier::new(self.sub);
             while let Some((expected, actual)) = self.delayed_records.pop() {
                 let expected = expected.apply(sub_unifier.sub);
@@ -866,7 +865,7 @@ impl MonoType {
 
             (MonoType::Builtin(exp), MonoType::Builtin(act)) => exp.unify(*act, unifier),
 
-            (MonoType::Label(l), MonoType::Label(r)) if l == r => (),
+            (MonoType::Label(_), MonoType::Label(_)) => (),
             (MonoType::Builtin(BuiltinType::String), MonoType::Label(_))
             | (MonoType::Label(_), MonoType::Builtin(BuiltinType::String)) => (),
 

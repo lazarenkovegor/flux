@@ -422,10 +422,7 @@ where
     pkg.infer(&mut infer)
         .map_err(|err| err.apply(&FinalizeTypes { sub: infer.sub }))?;
 
-    eprintln!("-- {}", infer.env);
-    dbg!(&infer.env);
     infer.env.apply_mut(&FinalizeTypes { sub: &infer.sub });
-    eprintln!("-- {}", infer.env);
 
     if infer.errors.has_errors() {
         for err in &mut infer.errors {
@@ -449,11 +446,9 @@ struct FinalizeTypes<'a> {
 
 impl Substituter for FinalizeTypes<'_> {
     fn try_apply(&self, tvr: Tvar) -> Option<MonoType> {
-        dbg!(tvr);
         self.sub.try_apply(tvr)
     }
     fn visit_type(&self, typ: &MonoType) -> Option<MonoType> {
-        eprintln!("{}", typ);
         match typ {
             MonoType::Var(tvr) => {
                 let typ = self.sub.try_apply(*tvr)?;
@@ -1485,28 +1480,6 @@ impl CallExpr {
         }
         match &*self.callee.type_of().apply_cow(infer.sub) {
             MonoType::Fun(func) => {
-                eprintln!(
-                    "{} {}",
-                    func,
-                    MonoType::from(Function {
-                        opt: MonoTypeMap::new(),
-                        req: req.clone().into_iter().map(|(k, (v, _))| (k, v)).collect(),
-                        pipe: pipe.clone().map(|prop| types::Property {
-                            k: prop.k,
-                            v: prop.v.0,
-                        }),
-                        // The return type of a function call is the type of the call itself.
-                        // Remind that, when two functions are unified, their return types are unified too.
-                        // As an example take:
-                        //   f = (a) => a + 1
-                        //   f(a: 0)
-                        // The return type of `f` is `int`.
-                        // The return type of `f(a: 0)` is `t0` (a fresh type variable).
-                        // Upon unification a substitution "t0 => int" is created, so that the compiler
-                        // can infer that, for instance, `f(a: 0) + 1` is legal.
-                        retn: self.typ.clone(),
-                    })
-                );
                 if let Err(err) = func.try_unify(
                     &Function {
                         opt: MonoTypeMap::new(),
