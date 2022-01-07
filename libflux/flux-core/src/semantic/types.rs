@@ -1,6 +1,7 @@
 //! Semantic representations of types.
 
 use std::{
+    borrow::Cow,
     cmp,
     collections::{BTreeMap, BTreeSet, HashMap},
     fmt::{self, Write},
@@ -130,15 +131,32 @@ impl PartialEq for PolyType {
 
 impl Substitutable for PolyType {
     fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
+        struct PolyTypeSubstituter<'a> {
+            vars: &'a [Tvar],
+            sub: &'a dyn Substituter,
+        }
+        impl Substituter for PolyTypeSubstituter<'_> {
+            fn try_apply(&self, tvr: Tvar) -> Option<MonoType> {
+                if self.vars.contains(&tvr) {
+                    None
+                } else {
+                    self.sub.try_apply(tvr)
+                }
+            }
+            fn visit_type(&self, typ: &MonoType) -> Option<MonoType> {
+                match typ {
+                    MonoType::Var(tvr) => self.try_apply(*tvr),
+                    _ => self.sub.visit_type(typ),
+                }
+            }
+        }
+
         // `vars` defines new distinct variables for `expr` so any substitutions applied on a
         // variable named the same must not be applied in `expr`
         self.expr
-            .apply_ref(&|var| {
-                if self.vars.contains(&var) {
-                    None
-                } else {
-                    sub.try_apply(var)
-                }
+            .apply_ref(&PolyTypeSubstituter {
+                vars: &self.vars,
+                sub,
             })
             .map(|expr| PolyType {
                 vars: self.vars.clone(),
@@ -675,7 +693,11 @@ impl BuiltinType {
 
 impl Substitutable for MonoType {
     fn apply_ref(&self, sub: &dyn Substituter) -> Option<Self> {
-        match self {
+        let typ = match sub.visit_type(self) {
+            Some(typ) => Cow::Owned(typ),
+            None => Cow::Borrowed(self),
+        };
+        match &*typ {
             MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) => None,
             MonoType::Var(tvr) => sub.try_apply(*tvr).map(|new| {
                 // If a variable is the replacement we do not recurse further
@@ -698,6 +720,11 @@ impl Substitutable for MonoType {
             MonoType::Record(obj) => obj.apply_ref(sub).map(MonoType::record),
             MonoType::Fun(fun) => fun.apply_ref(sub).map(MonoType::fun),
         }
+        .or_else(|| match typ {
+            // visit_type replaced `self` so return that
+            Cow::Owned(typ) => Some(typ),
+            Cow::Borrowed(_) => None,
+        })
     }
     fn free_vars(&self, vars: &mut Vec<Tvar>) {
         match self {

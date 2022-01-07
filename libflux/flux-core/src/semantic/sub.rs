@@ -235,15 +235,16 @@ where
 pub trait Substituter {
     /// Apply a substitution to a type variable, returning None if there is no substitution for the
     /// variable.
-    fn try_apply(&self, var: Tvar) -> Option<MonoType>;
-}
-
-impl<F> Substituter for F
-where
-    F: ?Sized + Fn(Tvar) -> Option<MonoType>,
-{
     fn try_apply(&self, var: Tvar) -> Option<MonoType> {
-        self(var)
+        let _ = var;
+        None
+    }
+
+    /// Apply a substitution to a type, returning None if there is no substitution for the
+    /// type.
+    fn visit_type(&self, typ: &MonoType) -> Option<MonoType> {
+        let _ = typ;
+        None
     }
 }
 
