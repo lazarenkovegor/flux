@@ -788,18 +788,18 @@ impl MonoType {
     }
 
     /// Creates a vector type
-    pub fn vector(v: MonoType) -> Self {
-        Self::Vector(Vector(v).into())
+    pub fn vector(v: impl Into<Ptr<Vector>>) -> Self {
+        Self::Vector(v.into())
     }
 
     /// Creates a dictionary type
-    pub fn dict(d: MonoType) -> Self {
-        Self::Dict(Dict(d).into())
+    pub fn dict(d: impl Into<Ptr<Dictionary>>) -> Self {
+        Self::Dict(d.into())
     }
 
     /// Creates a function type
-    pub fn fun(f: MonoType) -> Self {
-        Self::Fun(Function(f).into())
+    pub fn fun(f: impl Into<Ptr<Function>>) -> Self {
+        Self::Fun(f.into())
     }
 
     /// Creates a record type
@@ -917,7 +917,7 @@ impl MonoType {
         match self {
             MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) | MonoType::Var(_) => (),
             MonoType::Arr(arr) => arr.0.visit(f).map(MonoType::arr),
-            MonoType::Vector(vector) => vector.apply_ref(sub).map(MonoType::vector),
+            MonoType::Vector(vector) => vector.apply_ref(sub).map(MonoType::form),
             MonoType::Dict(dict) => dict.apply_ref(sub).map(MonoType::dict),
             MonoType::Record(obj) => obj.apply_ref(sub).map(MonoType::record),
             MonoType::Fun(fun) => fun.apply_ref(sub).map(MonoType::fun),
