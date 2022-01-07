@@ -472,7 +472,7 @@ pub enum MonoType {
     Error,
     #[display(fmt = "{}", _0)]
     Builtin(BuiltinType),
-    #[display(fmt = "string")]
+    #[display(fmt = "\"{}\"", _0)]
     Label(Label),
     #[display(fmt = "{}", _0)]
     Var(Tvar),
@@ -689,7 +689,7 @@ impl Substitutable for MonoType {
                     new.apply(sub)
                 }
             }),
-            MonoType::Arr(arr) => arr.apply_ref(sub).map(MonoType::arr),
+            MonoType::Arr(arr) => arr.apply_ref(sub).map(MonoType::from),
             MonoType::Vector(vector) => vector.apply_ref(sub).map(MonoType::vector),
             MonoType::Dict(dict) => dict.apply_ref(sub).map(MonoType::dict),
             MonoType::Record(obj) => obj.apply_ref(sub).map(MonoType::record),
@@ -783,23 +783,23 @@ impl MonoType {
 
 impl MonoType {
     /// Creates an array type
-    pub fn arr(a: impl Into<Ptr<Array>>) -> Self {
-        Self::Arr(a.into())
+    pub fn arr(a: MonoType) -> Self {
+        Self::Arr(Array(a).into())
     }
 
     /// Creates a vector type
-    pub fn vector(v: impl Into<Ptr<Vector>>) -> Self {
-        Self::Vector(v.into())
+    pub fn vector(v: MonoType) -> Self {
+        Self::Vector(Vector(v).into())
     }
 
     /// Creates a dictionary type
-    pub fn dict(d: impl Into<Ptr<Dictionary>>) -> Self {
-        Self::Dict(d.into())
+    pub fn dict(d: MonoType) -> Self {
+        Self::Dict(Dict(d).into())
     }
 
     /// Creates a function type
-    pub fn fun(f: impl Into<Ptr<Function>>) -> Self {
-        Self::Fun(f.into())
+    pub fn fun(f: MonoType) -> Self {
+        Self::Fun(Function(f).into())
     }
 
     /// Creates a record type
@@ -903,6 +903,24 @@ impl MonoType {
             MonoType::Dict(dict) => dict.contains(tv),
             MonoType::Record(row) => row.contains(tv),
             MonoType::Fun(fun) => fun.contains(tv),
+        }
+    }
+
+    fn visit(&self, f: &mut impl FnMut(&MonoType) -> Option<MonoType>) -> Option<MonoType> {
+        match f(self) {
+            Some(typ) => Some(typ.walk(f).unwrap_or(typ)),
+            None => self.walk(f),
+        }
+    }
+
+    fn walk(self, f: &mut impl FnMut(&MonoType) -> Option<MonoType>) -> Option<MonoType> {
+        match self {
+            MonoType::Error | MonoType::Builtin(_) | MonoType::Label(_) | MonoType::Var(_) => (),
+            MonoType::Arr(arr) => arr.0.visit(f).map(MonoType::arr),
+            MonoType::Vector(vector) => vector.apply_ref(sub).map(MonoType::vector),
+            MonoType::Dict(dict) => dict.apply_ref(sub).map(MonoType::dict),
+            MonoType::Record(obj) => obj.apply_ref(sub).map(MonoType::record),
+            MonoType::Fun(fun) => fun.apply_ref(sub).map(MonoType::fun),
         }
     }
 
@@ -1064,7 +1082,7 @@ impl Array {
         match with {
             Kind::Equatable => self.0.constrain(with, cons),
             _ => Err(Error::CannotConstrain {
-                act: MonoType::arr(self.clone()),
+                act: MonoType::from(self.clone()),
                 exp: with,
             }),
         }

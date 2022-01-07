@@ -150,9 +150,9 @@ impl Fresh for MonoType {
     fn fresh_ref(&self, f: &mut Fresher, sub: &mut TvarMap) -> Option<Self> {
         match self {
             MonoType::Var(tvr) => tvr.fresh_ref(f, sub).map(MonoType::Var),
-            MonoType::Arr(arr) => arr.fresh_ref(f, sub).map(MonoType::arr),
-            MonoType::Record(obj) => obj.fresh_ref(f, sub).map(MonoType::record),
-            MonoType::Fun(fun) => fun.fresh_ref(f, sub).map(MonoType::fun),
+            MonoType::Arr(arr) => arr.fresh_ref(f, sub).map(MonoType::from),
+            MonoType::Record(obj) => obj.fresh_ref(f, sub).map(MonoType::from),
+            MonoType::Fun(fun) => fun.fresh_ref(f, sub).map(MonoType::from),
             _ => None,
         }
     }

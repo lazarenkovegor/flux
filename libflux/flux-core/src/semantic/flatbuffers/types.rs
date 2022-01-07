@@ -157,7 +157,7 @@ fn from_table(table: flatbuffers::Table, t: fb::MonoType) -> Option<MonoType> {
         }
         fb::MonoType::Arr => {
             let opt: Option<Array> = fb::Arr::init_from_table(table).into();
-            Some(MonoType::arr(opt?))
+            Some(MonoType::from(opt?))
         }
         fb::MonoType::Vector => {
             let opt: Option<Vector> = fb::Vector::init_from_table(table).into();
@@ -165,12 +165,12 @@ fn from_table(table: flatbuffers::Table, t: fb::MonoType) -> Option<MonoType> {
         }
         fb::MonoType::Fun => {
             let opt: Option<Function> = fb::Fun::init_from_table(table).into();
-            Some(MonoType::fun(opt?))
+            Some(MonoType::from(opt?))
         }
         fb::MonoType::Record => fb::Record::init_from_table(table).into(),
         fb::MonoType::Dict => {
             let opt: Option<Dictionary> = fb::Dict::init_from_table(table).into();
-            Some(MonoType::dict(opt?))
+            Some(MonoType::from(opt?))
         }
         fb::MonoType::NONE => None,
         _ => unreachable!("Unknown type from table"),
