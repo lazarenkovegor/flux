@@ -472,7 +472,7 @@ pub enum MonoType {
     Error,
     #[display(fmt = "{}", _0)]
     Builtin(BuiltinType),
-    #[display(fmt = "\"{}\"", _0)]
+    #[display(fmt = "string")]
     Label(Label),
     #[display(fmt = "{}", _0)]
     Var(Tvar),

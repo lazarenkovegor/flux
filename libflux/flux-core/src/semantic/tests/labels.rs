@@ -10,9 +10,11 @@ fn labels() {
         ],
         src: r#"
             x = [{ a: 1 }] |> fill(column: "a", value: "x")
+            y = [{ a: 1, b: ""}] |> fill(column: "b", value: 1.0)
         "#,
         exp: map![
             "x" => "[{ a: string }]",
+            "y" => "[{ a: int, b: float }]",
         ],
     }
 }
