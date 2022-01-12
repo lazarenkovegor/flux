@@ -1,6 +1,8 @@
 package compiler
 
 import (
+	"fmt"
+
 	"github.com/influxdata/flux/codes"
 	"github.com/influxdata/flux/internal/errors"
 	"github.com/influxdata/flux/semantic"
@@ -13,6 +15,12 @@ func Compile(scope Scope, f *semantic.FunctionExpression, in semantic.MonoType) 
 	}
 	if in.Nature() != semantic.Object {
 		return nil, errors.Newf(codes.Invalid, "function input must be an object @ %v", f.Location())
+	}
+
+	// If the function is Vectorizable, `f.Vectorized` will be populated, and
+	// we should use the FunctionExpression it points to instead of `f`
+	if f.Vectorized != nil {
+		f = f.Vectorized
 	}
 
 	// Retrieve the function argument types and create an object type from them.
@@ -37,6 +45,7 @@ func Compile(scope Scope, f *semantic.FunctionExpression, in semantic.MonoType) 
 		}
 
 		name := arg.Name()
+
 		argT, err := arg.TypeOf()
 		if err != nil {
 			return nil, err
@@ -68,11 +77,14 @@ func Compile(scope Scope, f *semantic.FunctionExpression, in semantic.MonoType) 
 	}, nil
 }
 
-// substituteTypes will generate a substitution map by recursing through
+// substituteTypes will populate a substitution map by recursing through
 // inType and mapping any variables to the value in the other record.
 // If the input type is not a type variable, it will check to ensure
 // that the type in the input matches or it will return an error.
 func substituteTypes(subst map[uint64]semantic.MonoType, inferredType, actualType semantic.MonoType) error {
+	fmt.Printf("Inferred type is %v\n", inferredType)
+	fmt.Printf("Actual type is %v\n", actualType)
+
 	// If the input isn't a valid type, then don't consider it as
 	// part of substituting types. We will trust type inference has
 	// the correct type and that we are just handling a null value
@@ -256,6 +268,17 @@ func substituteTypes(subst map[uint64]semantic.MonoType, inferredType, actualTyp
 			}
 		}
 		return nil
+	case semantic.Vec:
+		lt, err := inferredType.ElemType()
+		if err != nil {
+			return err
+		}
+
+		rt, err := actualType.ElemType()
+		if err != nil {
+			return err
+		}
+		return substituteTypes(subst, lt, rt)
 	case semantic.Fun:
 		// TODO: https://github.com/influxdata/flux/issues/2587
 		return errors.New(codes.Unimplemented)
@@ -383,6 +406,12 @@ func apply(sub map[uint64]semantic.MonoType, props []semantic.PropertyType, t se
 			return t
 		}
 		return semantic.NewFunctionType(apply(sub, nil, retn), args)
+	case semantic.Vec:
+		element, err := t.ElemType()
+		if err != nil {
+			return t
+		}
+		return semantic.NewVectorType(apply(sub, props, element))
 	}
 	// If none of the above cases are matched, something has gone
 	// seriously wrong and we should panic.

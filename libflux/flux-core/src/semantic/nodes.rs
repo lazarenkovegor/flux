@@ -1138,12 +1138,28 @@ impl FunctionExpr {
                             let properties = e
                                 .properties
                                 .iter()
-                                .map(|p| {
-                                    Ok(Property {
+                                .map(|p| match p.value {
+                                    // XXX: sean (January 12 2022) - We may add vectorization
+                                    // support for binary expressions in the future. If that
+                                    // happens, this match statement can be removed, and we
+                                    // can just return the `Ok()` value below.
+                                    //
+                                    // It might be better to nstead return Ok only on
+                                    // the supported expression types, and return and Err as
+                                    // the default case.
+                                    Expression::Binary(_) => {
+                                        return Err(located(
+                                            self.body.loc().clone(),
+                                            ErrorKind::UnableToVectorize(
+                                                "Binary expressions cannot be vectorized".into(),
+                                            ),
+                                        ))
+                                    }
+                                    _ => Ok(Property {
                                         loc: p.loc.clone(),
                                         key: p.key.clone(),
                                         value: p.value.vectorize(&env)?,
-                                    })
+                                    }),
                                 })
                                 .collect::<Result<Vec<_>>>()?;
 

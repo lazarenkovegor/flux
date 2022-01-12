@@ -42,6 +42,8 @@ func NewMonoType(tbl flatbuffers.Table, t fbsemantic.MonoType) (MonoType, error)
 		tbler = new(fbsemantic.Fun)
 	case fbsemantic.MonoTypeDict:
 		tbler = new(fbsemantic.Dict)
+	case fbsemantic.MonoTypeVector:
+		tbler = new(fbsemantic.Vector)
 	default:
 		return MonoType{}, errors.Newf(codes.Internal, "unknown type (%v)", t)
 	}
@@ -92,6 +94,8 @@ func nature(tbl flatbuffers.Table, t fbsemantic.MonoType) Nature {
 		return Function
 	case fbsemantic.MonoTypeDict:
 		return Dictionary
+	case fbsemantic.MonoTypeVector:
+		return Vector
 	case fbsemantic.MonoTypeNONE,
 		fbsemantic.MonoTypeVar:
 		fallthrough
@@ -111,6 +115,7 @@ const (
 	Record  = Kind(fbsemantic.MonoTypeRecord)
 	Fun     = Kind(fbsemantic.MonoTypeFun)
 	Dict    = Kind(fbsemantic.MonoTypeDict)
+	Vec     = Kind(fbsemantic.MonoTypeVector)
 )
 
 // Kind returns what kind of monotype the receiver is.
@@ -271,17 +276,54 @@ func getArr(tbl fbTabler) (*fbsemantic.Arr, error) {
 	return arr, nil
 }
 
-// ElemType returns the element type if this monotype is an array, and an error otherise.
+func getVec(tbl fbTabler) (*fbsemantic.Vector, error) {
+	vec, ok := tbl.(*fbsemantic.Vector)
+	if !ok {
+		return nil, errors.New(codes.Internal, "MonoType is not a vector")
+	}
+	return vec, nil
+}
+
+// TODO(sean): Consider moving the ElemType to a Collection interface
+// That's only implemented by arrays and vectors
+// func (mt MonoType) ElementType() MonoType {
+//   _, aok := mt.tbl.(*fbsemantic.Arr)
+//   _, vok := mt.tbl.(*fbsemantic.Vec)
+//   if !aok && !vok {
+//     panic("type is not a collection")
+//   }
+// }
+//
+// type Collection interface {
+//   MonoType
+//   ElementType() MonoType
+// }
+
+// ElemType returns the element type if this monotype is an array or vector, and an error otherise.
 func (mt MonoType) ElemType() (MonoType, error) {
-	arr, err := getArr(mt.tbl)
-	if err != nil {
-		return MonoType{}, err
+	// XXX: sean (16 Dec 2021) - This err1/err2 business seems sloppy. There's
+	// probably a better way to do this. This is functional for now though.
+	// Will revisit later.
+	arr, err1 := getArr(mt.tbl)
+	vec, err2 := getVec(mt.tbl)
+	if err1 != nil && err2 != nil {
+		return MonoType{}, errors.New(codes.Internal, "MonoType is not an array or a vector")
 	}
 	var tbl flatbuffers.Table
-	if !arr.T(&tbl) {
-		return MonoType{}, errors.New(codes.Internal, "missing array type")
+	var t MonoType
+	var err error
+	if arr != nil {
+		if !arr.T(&tbl) {
+			return MonoType{}, errors.New(codes.Internal, "missing array type")
+		}
+		t, err = NewMonoType(tbl, arr.TType())
+	} else if vec != nil {
+		if !vec.T(&tbl) {
+			return MonoType{}, errors.New(codes.Internal, "missing vector type")
+		}
+		t, err = NewMonoType(tbl, vec.TType())
 	}
-	return NewMonoType(tbl, arr.TType())
+	return t, err
 }
 
 func getRecord(tbl fbTabler) (*fbsemantic.Record, error) {
@@ -645,6 +687,12 @@ func (mt MonoType) string(m map[uint64]uint64) string {
 			return "<" + err.Error() + ">"
 		}
 		return "[" + kt.string(m) + ": " + vt.string(m) + "]"
+	case Vec:
+		et, err := mt.ElemType()
+		if err != nil {
+			return "<" + err.Error() + ">"
+		}
+		return "[" + et.string(m) + "]"
 	default:
 		return "<" + fmt.Sprintf("unknown monotype (%v)", tk) + ">"
 	}
@@ -678,6 +726,20 @@ func NewArrayType(elemType MonoType) MonoType {
 	buf := builder.FinishedBytes()
 	arr := fbsemantic.GetRootAsArr(buf, 0)
 	mt, err := NewMonoType(arr.Table(), fbsemantic.MonoTypeArr)
+	if err != nil {
+		panic(err)
+	}
+	return mt
+}
+
+func NewVectorType(elemType MonoType) MonoType {
+	builder := flatbuffers.NewBuilder(32)
+	offset := buildVectorType(builder, elemType)
+	builder.Finish(offset)
+
+	buf := builder.FinishedBytes()
+	arr := fbsemantic.GetRootAsVector(buf, 0)
+	mt, err := NewMonoType(arr.Table(), fbsemantic.MonoTypeVector)
 	if err != nil {
 		panic(err)
 	}
@@ -827,6 +889,12 @@ func copyMonoType(builder *flatbuffers.Builder, t MonoType) flatbuffers.UOffsetT
 		key := monoTypeFromFunc(dict.K, dict.KType())
 		value := monoTypeFromFunc(dict.V, dict.VType())
 		return buildDictType(builder, key, value)
+	case fbsemantic.MonoTypeVector:
+		var vector fbsemantic.Vector
+		vector.Init(table.Bytes, table.Pos)
+
+		elem := monoTypeFromFunc(vector.T, vector.TType())
+		return buildArrayType(builder, elem)
 	default:
 		panic(fmt.Sprintf("unknown monotype (%v)", t.mt))
 	}
@@ -871,6 +939,14 @@ func buildArrayType(builder *flatbuffers.Builder, elemType MonoType) flatbuffers
 	fbsemantic.ArrAddTType(builder, elemType.mt)
 	fbsemantic.ArrAddT(builder, offset)
 	return fbsemantic.ArrEnd(builder)
+}
+
+func buildVectorType(builder *flatbuffers.Builder, elemType MonoType) flatbuffers.UOffsetT {
+	offset := copyMonoType(builder, elemType)
+	fbsemantic.VectorStart(builder)
+	fbsemantic.VectorAddTType(builder, elemType.mt)
+	fbsemantic.VectorAddT(builder, offset)
+	return fbsemantic.VectorEnd(builder)
 }
 
 // buildFunctionType will construct a fun type in the builder
